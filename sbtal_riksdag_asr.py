@@ -16,14 +16,16 @@
 
 # Lint as: python3
 """Datasets loader to create the Riksdag data"""
+# This script is full of local paths; sorry about that
 from pathlib import Path
 from pydub import AudioSegment
+import numpy as np
 
 import datasets
 from datasets.tasks import AutomaticSpeechRecognition
 from datasets.features import Audio
 
-ALIGNMENTS = Path("alignments")
+ALIGNMENTS = Path("/home/joregan/sbtal_riksdag_asr/alignments")
 TMP = Path("/tmp")
 parameters=["-ac", "1", "-acodec", "pcm_s16le", "-ar", "16000"]
 
@@ -37,6 +39,7 @@ class RDDataset(datasets.GeneratorBasedBuilder):
     def _info(self):
         features = datasets.Features(
             {
+                "id": datasets.Value("string"),
                 "audio": datasets.Audio(sampling_rate=16_000),
                 "text": datasets.Value("string"),
             }
@@ -62,13 +65,13 @@ class RDDataset(datasets.GeneratorBasedBuilder):
         ]
     
     def _generate_examples(self, split):
-        for file in ALIGNMENTS.glob("*"):
-            segments = []
-            with open(str(file)) as alignment:
+        for afile in ALIGNMENTS.glob("*"):
+            temp_wav = ""
+            with open(str(afile)) as alignment:
                 for line in alignment.readlines():
                     if line.startswith("FILE"):
                         continue
-                    parts = line.split("\t")
+                    parts = line.strip().split("\t")
                     if parts[3] == "MISALIGNED":
                         continue
                     vidid = parts[0]
@@ -76,21 +79,25 @@ class RDDataset(datasets.GeneratorBasedBuilder):
                     if Path(temp_wav).exists():
                         audio = AudioSegment.from_wav(temp_wav)
                     else:
-                        video_file = Path("/sbtal/riksdag-video/") / f"{parts[0]}_480p.mp4"
+                        video_file = Path("/sbtal/riksdag-video") / f"{parts[0]}_480p.mp4"
                         if video_file.exists():
                             vid_as = AudioSegment.from_file(str(video_file), "mp4")
                             vid_as.export(temp_wav, format="wav", parameters=parameters)
                             audio = AudioSegment.from_wav(temp_wav)
                         else:
                             continue
+                    print(parts)
                     start = int(float(parts[1]) * 1000)
                     end = int(float(parts[2]) * 1000)
                     text = parts[4]
-                    yield vidid, {
+                    piece_id = f"{vidid}_{start}_{end}"
+                    yield piece_id, {
                         "id": vidid,
                         "audio": {
-                            "array": audio[start:end],
+                            "array": np.array(audio[start:end].get_array_of_samples()),
                             "sampling_rate": 16_000
                         },
                         "text": text
                     }
+            if temp_wav != "":
+                Path.unlink(temp_wav)
