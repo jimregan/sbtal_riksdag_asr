@@ -17,6 +17,7 @@
 # Lint as: python3
 """Datasets loader to create the Riksdag data"""
 # This script is full of local paths; sorry about that
+import os
 from pathlib import Path
 from pydub import AudioSegment
 import numpy as np
@@ -100,4 +101,4 @@ class RDDataset(datasets.GeneratorBasedBuilder):
                         "text": text
                     }
             if temp_wav != "":
-                Path.unlink(temp_wav)
+                os.unlink(temp_wav)
